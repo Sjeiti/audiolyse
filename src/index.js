@@ -34,20 +34,19 @@ let barWidth = barDist*0.7
 const maxRecordingMillis = 8000
 let playing = false
 
-window.addEventListener('resize', onWindowResize)
-setTimeout(()=>{
-  onWindowResize()
-  draw()
-}, 40)
+const start = combine(onWindowResize, draw)
 
-//
+window.addEventListener('resize', onWindowResize)
+setTimeout(start, 40)
+
+//////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
 
 function initAudio(){
-  const fftSize = 512 // 128 // 512 // 2048
+  const fftSize = 128 // 128 // 512 // 2048
   const audioElement = document.querySelector('audio')
   audioElement.addEventListener('play', onAudioPlay)
   audioElement.addEventListener('ended', onAudioStop)
-  //
   //
   const audioContext = new (window.AudioContext || window.webkitAudioContext)()
   const analyser = audioContext.createAnalyser()
@@ -57,31 +56,29 @@ function initAudio(){
   //
   document.body.addEventListener('click', onBodyClickResume, false)
   function onBodyClickResume(){
-    audioContext.resume().then(() => {
-      console.log('Playback resumed successfully')
-    })
+    audioContext.resume().then(console.log.bind(console, 'Playback resumed successfully'))
     document.body.removeEventListener('click', onBodyClickResume)
   }
   //
   const streamingAudioSource = audioContext.createMediaElementSource(audioElement)
   streamingAudioSource.connect(analyser)
   streamingAudioSource.connect(audioContext.destination)
-
-  return [()=>(analyser.getByteTimeDomainData(dataArray),dataArray), bufferLength, audioElement]
+  //
+  return [()=>(analyser.getByteTimeDomainData(dataArray), dataArray), bufferLength, audioElement]
 }
 
 function initFileReader(audioElement) {
   const fileReader = document.querySelector('input[type=file]')
   fileReader.addEventListener('change', e=>{
-    console.log('change e',e) // todo: remove log
     const {target: {files: [file]}} = e
     const {name} = file
     const reader = new FileReader()
     reader.onload = function(e){
-      console.log('load e',e) // todo: remove log
       const dataURL = reader.result
-      audioElement.src = dataURL
+      const snd = new Audio(dataURL) // weird FF noise-suffix fix
+      audioElement.src = snd.src
       audioElement.dataset.name = name
+      audioElement.play()
     }
     reader.readAsDataURL(file)
   })
@@ -241,4 +238,8 @@ function startRecording(stream, lengthInMS) {
 
 function wait(delayInMS) {
   return new Promise(resolve => setTimeout(resolve, delayInMS));
+}
+
+function combine(){
+	return ()=>Array.from(arguments).forEach(fn=>fn())
 }
