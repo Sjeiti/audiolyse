@@ -19,7 +19,7 @@
     "write": "chokidar \"src/data/markdown/*.md\" -c \"npm run build:json\"",
     "webpack": "npx webpack --config webpack.config.js",
     "clean": "del-cli dist -f",
-    "serve": "node task/serve test 8675",
+    "serve": "node task/serve docs 8675",
     "lint:fix": "eslint src/js/**/*.js --fix",
     "version": "next-version package.json",
     "version:minor": "npm run version -- --minor",
