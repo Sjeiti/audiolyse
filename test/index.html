@@ -6,7 +6,9 @@
   <style type="text/css">
     body {
       background: #333;
+      color: #EEE;
     }
+    a { color: #EEE; }
     section {
       margin: 0 auto;
       max-width: 90%;
@@ -28,13 +30,31 @@
     audio {
       width: 100%;
     }
+    
+    .rotate {
+      margin: 0 1rem;
+    }
+    .rotate:before {
+      content: '';
+      animation: slashRotate 600ms linear infinite;
+      font-family: "Source Code Pro", monospace;
+    }
+    @keyframes slashRotate {
+      from { content: '/'; }
+      33% {  content: '-'; }
+      66% {  content: '\\'; }
+      to {   content: '|'; }
+    }
   </style>
 </head>
 <body>
 <section>
+  <input type="color" value="#FFFFFF" >
+  <input type="color" value="#FF0044" >
+  <input type="file" accept="audio/*" >
   <figure>
     <div class="spacer"><canvas></canvas></div>
-    <audio controls src="t-rex-roar.mp3">
+    <audio controls src="Motion_Accent_Signal_8bits_Down_48k24b.wav">
       Your browser does not support the <code>audio</code> element.
     </audio>
     <a download="video.webm">download</a>

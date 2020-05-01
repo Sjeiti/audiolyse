@@ -1,6 +1,8 @@
-// http://techslides.com/html5-canvas-animation-converted-to-video
+import 'mc_picker'
 
-const [getAudioData, bufferLength] = initAudio()
+const [getAudioData, bufferLength, audioElement] = initAudio()
+
+initFileReader(audioElement)
 
 const images = []
 
@@ -8,12 +10,10 @@ const spacer = document.querySelector('.spacer')
 
 const downloadButton = document.querySelector('a[download]')
 
-// const colorTransparent = 'rgba(0, 0, 0, 0)'
-const colorLight = 'rgb(200, 200, 200)'
-const colorDark = 'rgb(51, 77, 114)' // 'rgb(0, 0, 0)' // 'rgb(117, 167, 255)' //
+let [colorLight, colorDark] = initColors()
 
-const [canvasElement, canvasCtx] = createCanvas()
-document.querySelector('.spacer').appendChild(canvasElement)
+const [mainCanvas, mainContext] = createCanvas()
+document.querySelector('.spacer').appendChild(mainCanvas)
 
 const [backgroundCanvas, backgroundContext] = createCanvas()
 const [middlegroundCanvas, middlegroundContext] = createCanvas()
@@ -22,8 +22,8 @@ const [foregroundCanvas, foregroundContext] = createCanvas()
 const dotHeight = 4
 const mirror = true
 
-let width = canvasElement.offsetWidth
-let height = canvasElement.offsetHeight
+let width = mainCanvas.offsetWidth
+let height = mainCanvas.offsetHeight
 let width2 = width/2
 let height2 = height/2
 
@@ -31,6 +31,7 @@ const barNum = 60
 let barDist = width/barNum
 let barWidth = barDist*0.7
 
+const maxRecordingMillis = 8000
 let playing = false
 
 window.addEventListener('resize', onWindowResize)
@@ -42,7 +43,7 @@ setTimeout(()=>{
 //
 
 function initAudio(){
-  const fftSize = 512 // 2048
+  const fftSize = 512 // 128 // 512 // 2048
   const audioElement = document.querySelector('audio')
   audioElement.addEventListener('play', onAudioPlay)
   audioElement.addEventListener('ended', onAudioStop)
@@ -66,26 +67,54 @@ function initAudio(){
   streamingAudioSource.connect(analyser)
   streamingAudioSource.connect(audioContext.destination)
 
-  return [()=>(analyser.getByteTimeDomainData(dataArray),dataArray), bufferLength]
+  return [()=>(analyser.getByteTimeDomainData(dataArray),dataArray), bufferLength, audioElement]
+}
+
+function initFileReader(audioElement) {
+  const fileReader = document.querySelector('input[type=file]')
+  fileReader.addEventListener('change', e=>{
+    console.log('change e',e) // todo: remove log
+    const {target: {files: [file]}} = e
+    const {name} = file
+    const reader = new FileReader()
+    reader.onload = function(e){
+      console.log('load e',e) // todo: remove log
+      const dataURL = reader.result
+      audioElement.src = dataURL
+      audioElement.dataset.name = name
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function initColors() {
+  const colors = Array.from(document.querySelectorAll('input[type=color]'))
+  const onColorChange = (i, {target: { value }})=>{
+    if (i===0) colorLight = value
+    else colorDark = value
+    drawPrepare()
+  }
+  colors.forEach((c,i)=>c.addEventListener('change',onColorChange.bind(null,i)))
+  return colors.map(c=>c.value)
 }
 
 function draw() {
   if (playing) {
     drawLines()
-    canvasCtx.clearRect(0,0,width,height)
-    canvasCtx.drawImage(backgroundCanvas,0,0)
-    canvasCtx.drawImage(middlegroundCanvas,0,0)
+    mainContext.clearRect(0,0,width,height)
+    mainContext.drawImage(backgroundCanvas,0,0)
+    mainContext.drawImage(middlegroundCanvas,0,0)
     if (mirror) {
-      canvasCtx.save()
-      canvasCtx.scale(1,-1)
-      canvasCtx.drawImage(middlegroundCanvas,0,0,width,-height)
-      canvasCtx.restore()
+      mainContext.save()
+      mainContext.scale(1,-1)
+      mainContext.drawImage(middlegroundCanvas,0,0,width,-height)
+      mainContext.restore()
     }
-    canvasCtx.drawImage(foregroundCanvas, 0, 0)
+    mainContext.drawImage(foregroundCanvas, 0, 0)
     //
     // canvasElement.toBlob(blob=>saveAs(blob, 'myImage.png'))
     // const dataUrl = canvasElement.toDataURL('image/webp')
-    images.push(canvasElement.toDataURL('image/webp'))
+    images.push(mainCanvas.toDataURL('image/webp'))
   }
   //
   requestAnimationFrame(draw)
@@ -116,16 +145,8 @@ function onWindowResize(){
   height2 = height/2
   barDist = width/barNum
   barWidth = barDist*0.7
-  canvasElement.width = backgroundCanvas.width = middlegroundCanvas.width = foregroundCanvas.width = width
-  canvasElement.height = backgroundCanvas.height = middlegroundCanvas.height = foregroundCanvas.height = height
-  // canvasElement.width = backgroundCanvas.width = middlegroundCanvas.width = foregroundCanvas.width = width
-  // canvasElement.height = backgroundCanvas.height = middlegroundCanvas.height = foregroundCanvas.height = height
-  // ;[canvasElement, backgroundCanvas, middlegroundCanvas, foregroundCanvas].forEach(canvas=>{
-  //   canvas.width = width
-  //   canvas.height = height
-  //   canvas.setAttribute('width', width)
-  //   canvas.setAttribute('height', height)
-  // })
+  mainCanvas.width = backgroundCanvas.width = middlegroundCanvas.width = foregroundCanvas.width = width
+  mainCanvas.height = backgroundCanvas.height = middlegroundCanvas.height = foregroundCanvas.height = height
   drawPrepare()
 }
 
@@ -142,45 +163,50 @@ function onAudioPlay(e){
   /////
   downloadButton.removeAttribute('href')
   data.length = 0
-  stream = canvasElement.captureStream(25)
+  stream = mainCanvas.captureStream(25)
   recorder = new MediaRecorder(stream)
   recorder.ondataavailable = event => data.push(event.data)
   recorder.start()
   /////
-  const recordingTimeMS = 5000
-  startRecording(stream, recordingTimeMS)
-    .then (recordedChunks => {
-      let recordedBlob = new Blob(recordedChunks, { type: "video/webm" });
-      downloadButton.href = URL.createObjectURL(recordedBlob);
-      downloadButton.download = "RecordedVideo.webm";
-
-      console.log("Successfully recorded " + recordedBlob.size + " bytes of " +
-          recordedBlob.type + " media.");
-    })
+  startRecording(stream, maxRecordingMillis).then(onRecordingEnded)
 }
 
 function onAudioStop(e){
   console.log('e.type',e.type) // todo: remove log
 	playing = false
   //
+  downloadButton.classList.add('rotate')
   stream?.getTracks().forEach(track => track.stop())
+}
+
+function onRecordingEnded(recordedChunks){
+  let recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+  downloadButton.href = URL.createObjectURL(recordedBlob);
+  downloadButton.download = (audioElement.dataset.name||audioElement.src).split(/\//g).pop()
+  downloadButton.classList.remove('rotate')
+  console.log(`Successfully recorded ${recordedBlob.size} bytes of ${recordedBlob.type} media.`);
 }
 
 function drawPrepare(){
   middlegroundContext.fillStyle = colorDark
-  //
+  middlegroundContext.clearRect(0,0,width,height)
   backgroundContext.fillStyle = colorLight
+  //
+  backgroundContext.clearRect(0,0,width,height)
   backgroundContext.fillRect(0,0,width,height)
   //
   foregroundContext.fillStyle = colorLight
+  foregroundContext.clearRect(0,0,width,height)
   for (let j=0;j<barNum;j++) {
     const x = j*barDist
     foregroundContext.fillRect(x,0,barWidth,height)
   }
   //
-  canvasCtx.drawImage(backgroundCanvas,0,0)
-  canvasCtx.fillRect(0, height/2 - dotHeight/2, width, dotHeight)
-  canvasCtx.drawImage(foregroundCanvas, 0, 0)
+  mainContext.fillStyle = colorDark
+  mainContext.clearRect(0,0,width,height)
+  mainContext.drawImage(backgroundCanvas,0,0)
+  mainContext.fillRect(0, height/2 - dotHeight/2, width, dotHeight)
+  mainContext.drawImage(foregroundCanvas, 0, 0)
 }
 
 function createCanvas(){
@@ -189,19 +215,13 @@ function createCanvas(){
   return [canvas, context]
 }
 
-// function blobToDataURL(blob, callback) {
-//     var a = new FileReader();
-//     a.onload = function(e) {callback(e.target.result);}
-//     a.readAsDataURL(blob);
-// }
-
 function startRecording(stream, lengthInMS) {
   let recorder = new MediaRecorder(stream);
   let data = [];
 
   recorder.ondataavailable = event => data.push(event.data);
   recorder.start();
-  console.log(recorder.state + " for " + (lengthInMS/1000) + " seconds...");
+  console.log(`${recorder.state} for ${lengthInMS/1000} seconds...`);
 
   let stopped = new Promise((resolve, reject) => {
     recorder.onstop = resolve;
@@ -209,7 +229,7 @@ function startRecording(stream, lengthInMS) {
   });
 
   let recorded = wait(lengthInMS).then(
-    () => recorder.state == "recording" && recorder.stop()
+    () => recorder.state === 'recording' && recorder.stop()
   );
 
   return Promise.all([

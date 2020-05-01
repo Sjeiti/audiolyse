@@ -99,6 +99,7 @@
   },
   "homepage": "https://github.com/Sjeiti/audiolyse#readme",
   "dependencies": {
+    "mc_picker": "^1.1.14",
     "whammy": "0.0.1"
   }
 }
