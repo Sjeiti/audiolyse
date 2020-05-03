@@ -121,13 +121,25 @@ function _iterableToArrayLimit(arr, i) { if (typeof Symbol === "undefined" || !(
 
 function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
+ // const verticalScale = 1
 
+var locationVars = location.search.substr(1).split(/&/).map(function (s) {
+  return s.split(/=/);
+}).reduce(function (acc, _ref) {
+  var _ref2 = _slicedToArray(_ref, 2),
+      key = _ref2[0],
+      val = _ref2[1];
 
-var _initAudio = initAudio(),
+  return acc[key] = parseInt(val, 10), acc;
+}, {});
+var waveOrFreq = false;
+
+var _initAudio = initAudio(locationVars.fftSize || 2048),
     _initAudio2 = _slicedToArray(_initAudio, 3),
     getAudioData = _initAudio2[0],
     bufferLength = _initAudio2[1],
-    audioElement = _initAudio2[2];
+    audioElement = _initAudio2[2]; // 128 // 512 // 2048
+
 
 initFileReader(audioElement);
 var images = [];
@@ -167,19 +179,21 @@ var width = mainCanvas.offsetWidth;
 var height = mainCanvas.offsetHeight;
 var width2 = width / 2;
 var height2 = height / 2;
+var stream = null;
+var barSize = locationVars.bar || 2;
+var barMargin = locationVars.margin || 4;
 var barNum = 60;
 var barDist = width / barNum;
 var barWidth = barDist * 0.7;
 var maxRecordingMillis = 8000;
+var waitAfterRecordMillis = 1000;
 var playing = false;
 var start = combine(onWindowResize, draw);
 window.addEventListener('resize', onWindowResize);
 setTimeout(start, 40); //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
 
-function initAudio() {
-  var fftSize = 128; // 128 // 512 // 2048
-
+function initAudio(fftSize) {
   var audioElement = document.querySelector('audio');
   audioElement.addEventListener('play', onAudioPlay);
   audioElement.addEventListener('ended', onAudioStop); //
@@ -187,8 +201,14 @@ function initAudio() {
   var audioContext = new (window.AudioContext || window.webkitAudioContext)();
   var analyser = audioContext.createAnalyser();
   analyser.fftSize = fftSize;
-  var bufferLength = analyser.frequencyBinCount;
-  var dataArray = new Uint8Array(bufferLength); //
+  analyser.smoothingTimeConstant = 0.6; // 0.8
+  // analyser.minDecibels = -80 // -100
+  // analyser.maxDecibels = -40 // -30
+
+  var bufferLength = analyser.fftSize; // const bufferLength = analyser.frequencyBinCount
+
+  var dataArray = new Uint8Array(bufferLength); // window.dootoorrooy = dataArray // todo remove
+  //
 
   document.body.addEventListener('click', onBodyClickResume, false);
 
@@ -202,9 +222,13 @@ function initAudio() {
   streamingAudioSource.connect(analyser);
   streamingAudioSource.connect(audioContext.destination); //
 
-  return [function () {
+  var getAudioData = waveOrFreq ? function () {
     return analyser.getByteTimeDomainData(dataArray), dataArray;
-  }, bufferLength, audioElement];
+  } : function () {
+    return analyser.getByteFrequencyData(dataArray), dataArray;
+  }; //
+
+  return [getAudioData, bufferLength, audioElement];
 }
 
 function initFileReader(audioElement) {
@@ -232,8 +256,8 @@ function initFileReader(audioElement) {
 function initColors() {
   var colors = Array.from(document.querySelectorAll('input[type=color]'));
 
-  var onColorChange = function onColorChange(i, _ref) {
-    var value = _ref.target.value;
+  var onColorChange = function onColorChange(i, _ref3) {
+    var value = _ref3.target.value;
     if (i === 0) colorLight = value;else colorDark = value;
     drawPrepare();
   };
@@ -248,7 +272,7 @@ function initColors() {
 
 function draw() {
   if (playing) {
-    drawLines();
+    waveOrFreq ? drawWave() : drawFreq();
     mainContext.clearRect(0, 0, width, height);
     mainContext.drawImage(backgroundCanvas, 0, 0);
     mainContext.drawImage(middlegroundCanvas, 0, 0);
@@ -258,20 +282,19 @@ function draw() {
       mainContext.scale(1, -1);
       mainContext.drawImage(middlegroundCanvas, 0, 0, width, -height);
       mainContext.restore();
-    }
-
-    mainContext.drawImage(foregroundCanvas, 0, 0); //
+    } // waveOrFreq&&mainContext.drawImage(foregroundCanvas, 0, 0)
+    //
     // canvasElement.toBlob(blob=>saveAs(blob, 'myImage.png'))
     // const dataUrl = canvasElement.toDataURL('image/webp')
 
-    images.push(mainCanvas.toDataURL('image/webp'));
-  } //
 
+    images.push(mainCanvas.toDataURL('image/webp'));
+  }
 
   requestAnimationFrame(draw);
 }
 
-function drawLines() {
+function drawWave() {
   var dataArray = getAudioData();
   middlegroundContext.clearRect(0, 0, width, height);
   middlegroundContext.beginPath();
@@ -289,9 +312,19 @@ function drawLines() {
   middlegroundContext.fillRect(0, height / 2 - dotHeight / 2, width, dotHeight);
 }
 
+function drawFreq() {
+  var dataArray = getAudioData();
+  middlegroundContext.clearRect(0, 0, width, height);
+
+  for (var i = 0, l = bufferLength; i < l; i += 4) {
+    var x = i / bufferLength * width * (barSize + barMargin);
+    var v = 0.5 * (dataArray[i] / 256.0);
+    var y = v * height;
+    middlegroundContext.fillRect(x, height2, barSize, Math.max(y, mirror ? barSize / 2 : barSize));
+  }
+}
+
 function onWindowResize() {
-  // width = window.innerWidth
-  // height = window.innerHeight
   width = spacer.offsetWidth;
   height = spacer.offsetHeight;
   width2 = width / 2;
@@ -303,51 +336,39 @@ function onWindowResize() {
   drawPrepare();
 }
 
-var stream = null;
-var recorder = null;
-var data = [];
-
 function onAudioPlay(e) {
   console.log('e.type', e.type); // todo: remove log
 
   playing = true; //
-  ///
-  ////
-  /////
 
   downloadButton.removeAttribute('href');
-  data.length = 0;
-  stream = mainCanvas.captureStream(25);
-  recorder = new MediaRecorder(stream);
-
-  recorder.ondataavailable = function (event) {
-    return data.push(event.data);
-  };
-
-  recorder.start(); /////
+  stream = mainCanvas.captureStream(25); //
 
   startRecording(stream, maxRecordingMillis).then(onRecordingEnded);
 }
 
 function onAudioStop(e) {
-  var _stream;
-
-  console.log('e.type', e.type); // todo: remove log
-
-  playing = false; //
+  console.log('onAudioStop', e, stream); // todo: remove log
 
   downloadButton.classList.add('rotate');
-  (_stream = stream) === null || _stream === void 0 ? void 0 : _stream.getTracks().forEach(function (track) {
-    return track.stop();
-  });
+  setTimeout(function () {
+    var _stream;
+
+    playing = false;
+    (_stream = stream) === null || _stream === void 0 ? void 0 : _stream.getTracks().forEach(function (track) {
+      return track.stop();
+    });
+  }, waitAfterRecordMillis);
 }
 
 function onRecordingEnded(recordedChunks) {
+  console.log('onRecordingEnded'); // todo: remove log
+
   var recordedBlob = new Blob(recordedChunks, {
     type: 'video/webm'
   });
   downloadButton.href = URL.createObjectURL(recordedBlob);
-  downloadButton.download = (audioElement.dataset.name || audioElement.src).split(/\//g).pop();
+  downloadButton.download = (audioElement.dataset.name || audioElement.src).split(/\//g).pop().replace(/\.\w+$/, '.webm');
   downloadButton.classList.remove('rotate');
   console.log("Successfully recorded ".concat(recordedBlob.size, " bytes of ").concat(recordedBlob.type, " media."));
 }
@@ -366,14 +387,12 @@ function drawPrepare() {
   for (var j = 0; j < barNum; j++) {
     var x = j * barDist;
     foregroundContext.fillRect(x, 0, barWidth, height);
-  } //
-
+  }
 
   mainContext.fillStyle = colorDark;
   mainContext.clearRect(0, 0, width, height);
-  mainContext.drawImage(backgroundCanvas, 0, 0);
-  mainContext.fillRect(0, height / 2 - dotHeight / 2, width, dotHeight);
-  mainContext.drawImage(foregroundCanvas, 0, 0);
+  mainContext.drawImage(backgroundCanvas, 0, 0); // mainContext.fillRect(0, height/2 - dotHeight/2, width, dotHeight)
+  // mainContext.drawImage(foregroundCanvas, 0, 0)
 }
 
 function createCanvas() {
@@ -386,8 +405,8 @@ function startRecording(stream, lengthInMS) {
   var recorder = new MediaRecorder(stream);
   var data = [];
 
-  recorder.ondataavailable = function (event) {
-    return data.push(event.data);
+  recorder.ondataavailable = function (e) {
+    return data.push(e.data);
   };
 
   recorder.start();
@@ -398,10 +417,12 @@ function startRecording(stream, lengthInMS) {
     recorder.onerror = function (event) {
       return reject(event.name);
     };
-  });
+  }); // stopped.then(console.log.bind(console, 'recorderstopped'))
+
   var recorded = wait(lengthInMS).then(function () {
     return recorder.state === 'recording' && recorder.stop();
-  });
+  }); // recorded.then(console.log.bind(console, 'recorderrecorded'))
+
   return Promise.all([stopped, recorded]).then(function () {
     return data;
   });
@@ -420,7 +441,80 @@ function combine() {
       return fn();
     });
   };
-}
+} /////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+/////////////////////////////////////
+//
+// const WIDTH = 400
+// const HEIGHT = 300
+// const [testCanvas, canvasCtx] = createCanvas()
+// testCanvas.width = WIDTH
+// testCanvas.height = HEIGHT
+// testCanvas.style.width = `${WIDTH}px`
+// testCanvas.style.height = `${HEIGHT}px`
+// testCanvas.style.border = '1px solid #F04'
+// testCanvas.style.position = 'static'
+// console.log('testCanvas',testCanvas) // todo: remove log
+// document.querySelector('section').appendChild(testCanvas)
+// // document.querySelector('.spacer').appendChild(testCanvas)
+// function drew() {
+//   if (!window.dootoorrooy) return
+//   requestAnimationFrame(drew)
+//
+//   canvasCtx.fillStyle = 'rgb(200, 200, 200)'
+//   canvasCtx.fillRect(0, 0, WIDTH, HEIGHT)
+//
+//   canvasCtx.lineWidth = 2
+//   canvasCtx.strokeStyle = 'rgb(0, 0, 0)'
+//
+//   const sliceWidth = WIDTH * 1.0 / bufferLength
+//   let x = 0
+//
+//   canvasCtx.beginPath()
+//   for(var i = 0; i < bufferLength; i++) {
+//     const v = window.dootoorrooy[i]/128.0
+//     const y = v * HEIGHT/2
+//
+//     if(i === 0)
+//       canvasCtx.moveTo(x, y)
+//     else
+//       canvasCtx.lineTo(x, y)
+//
+//     x += sliceWidth
+//   }
+//
+//   canvasCtx.lineTo(WIDTH, HEIGHT/2)
+//   canvasCtx.stroke()
+// }
+// // setTimeout(drew, 1000)
+//
+//
+//
+// function drww() {
+//   requestAnimationFrame(drww)
+//   // analyser.getByteFrequencyData(dataArray)
+//   canvasCtx.fillStyle = 'rgb(0, 0, 0)'
+//   canvasCtx.fillRect(0, 0, WIDTH, HEIGHT)
+//   var barWidth = (WIDTH / bufferLength) * 2.5
+//   var barHeight
+//   var x = 0
+//   for(var i = 0; i < bufferLength; i++) {
+//     barHeight = window.dootoorrooy[i]
+//     canvasCtx.fillStyle = 'rgb(' + (barHeight+100) + ',50,50)'
+//     canvasCtx.fillRect(x,HEIGHT-barHeight/2,barWidth,barHeight/2)
+//     x += barWidth + 1
+//   }
+// }
+// setTimeout(drww, 1000)
 
 /***/ })
 

@@ -16,7 +16,7 @@ module.exports = env => {
     ,entry: './src/index.js'
     ,output: {
       filename: 'index.js'
-      ,path: path.resolve(__dirname,'test')
+      ,path: path.resolve(__dirname,'docs')
     }
     ,devtool: 'source-map'
     ,module: {
