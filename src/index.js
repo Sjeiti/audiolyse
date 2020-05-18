@@ -39,7 +39,7 @@ const barNum = 60
 let barDist = width/barNum
 let barWidth = barDist*0.7
 
-const maxRecordingMillis = 8000
+const maxRecordingMillis = locationVars.t||8000
 const waitAfterRecordMillis = 1000
 let playing = false
 
